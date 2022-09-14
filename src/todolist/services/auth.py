@@ -28,7 +28,6 @@ class AuthService:
     def get_password_hash(cls, password):
         return pwd_context.hash(password)
 
-
     @classmethod
     def create_token(
             cls, user: tables.User,
@@ -75,29 +74,35 @@ class AuthService:
             raise credentials_exception from None
         return user
 
-    def __init__(self, session: Session = Depends(get_session)):
-        self.session = session
-
-    def register_new_user(self, user_data: UserCreate) -> Token:
+    def _check_user_in_db(self, username: str, email: str) -> None:
         user_in_db = (
             self.session
             .query(tables.User)
-            .filter_by(username=user_data.username)
+            .filter_by(username=username)
             .first()
         )
         if user_in_db:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                                 detail='Username already exists')
+
         user_in_db = (
             self.session
             .query(tables.User)
-            .filter_by(email=user_data.email)
+            .filter_by(email=email)
             .first()
         )
         if user_in_db:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                                detail='User email already exists')
+                                detail='Email already exists')
 
+    def __init__(self, session: Session = Depends(get_session)):
+        self.session = session
+
+    def register_new_user(self, user_data: UserCreate) -> Token:
+        self._check_user_in_db(
+            username=user_data.username,
+            email=user_data.email
+        )
         user = tables.User(
             username=user_data.username,
             full_name=user_data.full_name,
@@ -125,7 +130,7 @@ class AuthService:
             raise auth_exception
 
         if not self.verify_password(password, user.hashed_password):
-            raise  auth_exception
+            raise auth_exception
 
         return self.create_token(user)
 
